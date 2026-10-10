@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Lista de precios</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Roboto,Arial,sans-serif;background:#f4f4f4;color:#111111}
+  header{background:#000000;color:#fff;padding:18px 16px 14px}
+  .local{font-size:12px;letter-spacing:2px;text-transform:uppercase;opacity:.8;min-height:14px}
+  h1{margin:2px 0 10px;font-size:24px}
+  .iva{display:inline-block;background:#fff;color:#000000;font-weight:700;font-size:13px;padding:5px 12px;border-radius:14px}
+  .bar{position:sticky;top:0;background:#f4f4f4;padding:10px 12px 6px;z-index:2}
+  input{width:100%;font-size:16px;padding:12px 14px;border:1px solid #cccccc;border-radius:10px;background:#fff}
+  .meta{font-size:12px;color:#666;padding:6px 4px 0;min-height:20px}
+  ul{list-style:none;margin:0;padding:0 12px 12px}
+  li{display:flex;justify-content:space-between;align-items:center;gap:12px;background:#fff;margin-top:6px;padding:11px 12px;border-radius:10px}
+  .d{font-size:14px;line-height:1.3}.c{font-size:11px;color:#888888}
+  .p{font-weight:700;font-size:16px;white-space:nowrap;color:#000000}
+  footer{font-size:11px;color:#777;text-align:center;padding:14px 16px 28px}
+  .msg{text-align:center;color:#666;padding:36px 20px;font-size:15px}
+  .msg button{margin-top:14px;font-size:15px;padding:10px 18px;border:0;border-radius:10px;background:#000;color:#fff}
+  .spin{width:28px;height:28px;border:3px solid #ddd;border-top-color:#000;border-radius:50%;margin:0 auto 12px;animation:g 0.8s linear infinite}
+  @keyframes g{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="local" id="local"></div>
+  <h1 id="suc">Lista de precios</h1>
+  <span class="iva">Precios finales con IVA incluido</span>
+</header>
+<div class="bar">
+  <input id="q" type="search" placeholder="Buscar producto o código…" autocomplete="off" disabled>
+  <div class="meta" id="m"></div>
+</div>
+<ul id="l"><li class="msg" style="display:block"><div class="spin"></div>Cargando precios…</li></ul>
+<footer id="pie">Todos los precios incluyen IVA. Sujetos a modificación sin previo aviso. Consultá stock en el local.</footer>
+
+<script>
+// Link de la web app de Google Apps Script (termina en /exec)
+var WEB_APP = "https://script.google.com/macros/s/AKfycby0M2Fln66trb2j68RSKc6K0_d5RLrsL3uTOWMEcOG60TQB1AcgUNdATPwL5Oiz07GM1A/exec";
+
+var L = document.getElementById("l"), M = document.getElementById("m"), Q = document.getElementById("q");
+var D = [], N = [], t;
+var fmt = new Intl.NumberFormat("es-AR", {style: "currency", currency: "ARS", maximumFractionDigits: 0});
+
+function n(s){ return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""); }
+function e(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); }
+
+function mensaje(txt, reintentar){
+  L.innerHTML = '<li class="msg" style="display:block">' + e(txt) +
+    (reintentar ? '<br><button onclick="cargar()">Reintentar</button>' : '') + '</li>';
+  M.textContent = "";
+}
+
+function pintar(){
+  var q = n(Q.value.trim()), h = [], c = 0;
+  for (var i = 0; i < D.length; i++){
+    if (q && N[i].indexOf(q) < 0) continue;
+    c++;
+    h.push('<li><div><div class="d">' + e(D[i][1]) + '</div><div class="c">Cód. ' + e(D[i][0]) +
+      '</div></div><div class="p">' + fmt.format(D[i][2]) + '</div></li>');
+  }
+  L.innerHTML = c ? h.join("") : '<li class="msg" style="display:block">No encontramos productos con esa búsqueda.</li>';
+  M.textContent = c + (c === 1 ? " producto" : " productos");
+}
+
+function cargar(){
+  var clave = new URLSearchParams(location.search).get("s");
+  if (!clave){ mensaje("Escaneá el código QR de la sucursal para ver la lista de precios."); return; }
+  L.innerHTML = '<li class="msg" style="display:block"><div class="spin"></div>Cargando precios…</li>';
+  fetch(WEB_APP + "?formato=json&s=" + encodeURIComponent(clave), {credentials: "omit", cache: "no-store"})
+    .then(function(r){ if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function(d){
+      if (d.error){ mensaje(d.error); return; }
+      document.getElementById("local").textContent = d.local || "";
+      document.getElementById("suc").textContent = d.sucursal;
+      document.title = "Precios " + d.sucursal;
+      document.getElementById("pie").textContent = "Todos los precios incluyen IVA." +
+        (d.fecha ? " Actualizados al " + d.fecha + "." : "") +
+        " Sujetos a modificación sin previo aviso. Consultá stock en el local.";
+      D = d.items || [];
+      N = D.map(function(r){ return n(r[0] + " " + r[1]); });
+      Q.disabled = false;
+      pintar();
+    })
+    .catch(function(){ mensaje("No pudimos cargar los precios. Revisá la conexión e intentá de nuevo.", true); });
+}
+
+Q.addEventListener("input", function(){ clearTimeout(t); t = setTimeout(pintar, 150); });
+cargar();
+</script>
+</body>
+</html>
